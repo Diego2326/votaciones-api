@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: 'postgres:16'
+    environment:
+      - 'POSTGRES_DB=votaciones'
+      - 'POSTGRES_PASSWORD=votaciones'
+      - 'POSTGRES_USER=votaciones'
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:
