@@ -1,5 +1,6 @@
 package com.votaciones.api.vote.domain
 
+import com.votaciones.api.access.domain.TournamentJoinSessionEntity
 import com.votaciones.api.common.entity.BaseEntity
 import com.votaciones.api.match.domain.MatchEntity
 import com.votaciones.api.participant.domain.ParticipantEntity
@@ -18,13 +19,14 @@ import jakarta.persistence.UniqueConstraint
 @Table(
     name = "votes",
     uniqueConstraints = [
-        UniqueConstraint(name = "uk_votes_match_voter", columnNames = ["match_id", "voter_id"]),
+        UniqueConstraint(name = "uk_votes_match_join_session", columnNames = ["match_id", "join_session_id"]),
     ],
     indexes = [
         Index(name = "idx_votes_tournament", columnList = "tournament_id"),
         Index(name = "idx_votes_round", columnList = "round_id"),
         Index(name = "idx_votes_match", columnList = "match_id"),
         Index(name = "idx_votes_voter", columnList = "voter_id"),
+        Index(name = "idx_votes_join_session", columnList = "join_session_id"),
     ],
 )
 class VoteEntity(
@@ -37,9 +39,12 @@ class VoteEntity(
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "match_id", nullable = false)
     var match: MatchEntity,
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "voter_id")
+    var voter: UserEntity? = null,
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "voter_id", nullable = false)
-    var voter: UserEntity,
+    @JoinColumn(name = "join_session_id", nullable = false)
+    var joinSession: TournamentJoinSessionEntity,
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "selected_participant_id", nullable = false)
     var selectedParticipant: ParticipantEntity,

@@ -10,4 +10,6 @@ import java.util.UUID
 interface TournamentRepository : JpaRepository<TournamentEntity, UUID> {
     fun findAllByStatus(status: TournamentStatus, pageable: Pageable): Page<TournamentEntity>
     fun findAllByCreatedById(createdById: UUID, pageable: Pageable): Page<TournamentEntity>
+    fun findByJoinPin(joinPin: String): TournamentEntity?
+    fun findByQrToken(qrToken: String): TournamentEntity?
 }

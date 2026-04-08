@@ -11,7 +11,8 @@ object VoteMapper {
         tournamentId = entity.tournament.id,
         roundId = entity.round.id,
         matchId = entity.match.id,
-        voterId = entity.voter.id,
+        voterId = entity.voter?.id,
+        joinSessionId = entity.joinSession.id,
         selectedParticipantId = entity.selectedParticipant.id,
         createdAt = entity.createdAt,
     )

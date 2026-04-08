@@ -1,5 +1,6 @@
 package com.votaciones.api.tournament.domain
 
+import com.votaciones.api.access.domain.TournamentAccessMode
 import com.votaciones.api.common.entity.BaseEntity
 import com.votaciones.api.user.domain.UserEntity
 import jakarta.persistence.Column
@@ -40,4 +41,11 @@ class TournamentEntity(
     var startAt: Instant? = null,
     @Column(name = "end_at")
     var endAt: Instant? = null,
+    @Enumerated(EnumType.STRING)
+    @Column(name = "access_mode", nullable = false, length = 32)
+    var accessMode: TournamentAccessMode = TournamentAccessMode.ANONYMOUS,
+    @Column(name = "join_pin", nullable = false, length = 12)
+    var joinPin: String,
+    @Column(name = "qr_token", nullable = false, length = 128)
+    var qrToken: String,
 ) : BaseEntity()

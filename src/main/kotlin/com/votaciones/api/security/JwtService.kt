@@ -60,6 +60,7 @@ class JwtService(
     ): String {
         val now = Instant.now()
         return Jwts.builder()
+            .id(UUID.randomUUID().toString())
             .issuer(jwtProperties.issuer)
             .subject(user.username)
             .claim("uid", user.id.toString())

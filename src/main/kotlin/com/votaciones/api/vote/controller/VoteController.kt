@@ -6,11 +6,11 @@ import com.votaciones.api.vote.service.VoteService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
@@ -22,12 +22,12 @@ class VoteController(
 ) {
 
     @PostMapping("/matches/{matchId}/vote")
-    @PreAuthorize("hasAnyRole('ADMIN','ORGANIZER','VOTER')")
     fun vote(
         @PathVariable matchId: UUID,
+        @RequestHeader("X-Tournament-Session") sessionToken: String,
         @Valid @RequestBody request: CastVoteRequest,
     ): ResponseEntity<ApiResponse<Any>> = ResponseEntity.status(HttpStatus.CREATED).body(
-        ApiResponse(message = "Vote recorded", data = voteService.castVote(matchId, request)),
+        ApiResponse(message = "Vote recorded", data = voteService.castVote(matchId, sessionToken, request)),
     )
 
     @GetMapping("/matches/{matchId}/results")
@@ -46,8 +46,10 @@ class VoteController(
     )
 
     @GetMapping("/matches/{matchId}/my-vote")
-    @PreAuthorize("isAuthenticated()")
-    fun myVote(@PathVariable matchId: UUID): ResponseEntity<ApiResponse<Any>> = ResponseEntity.ok(
-        ApiResponse(data = voteService.getMyVote(matchId)),
+    fun myVote(
+        @PathVariable matchId: UUID,
+        @RequestHeader("X-Tournament-Session") sessionToken: String,
+    ): ResponseEntity<ApiResponse<Any>> = ResponseEntity.ok(
+        ApiResponse(data = voteService.getMyVote(matchId, sessionToken)),
     )
 }

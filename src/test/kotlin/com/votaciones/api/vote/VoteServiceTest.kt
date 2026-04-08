@@ -1,5 +1,8 @@
 package com.votaciones.api.vote
 
+import com.votaciones.api.access.domain.TournamentAccessMode
+import com.votaciones.api.access.dto.JoinByDisplayNameRequest
+import com.votaciones.api.access.service.TournamentAccessService
 import com.votaciones.api.common.exception.BadRequestException
 import com.votaciones.api.common.exception.ConflictException
 import com.votaciones.api.match.domain.MatchEntity
@@ -10,7 +13,6 @@ import com.votaciones.api.participant.repository.ParticipantRepository
 import com.votaciones.api.round.domain.RoundEntity
 import com.votaciones.api.round.domain.RoundStatus
 import com.votaciones.api.round.repository.RoundRepository
-import com.votaciones.api.security.UserPrincipal
 import com.votaciones.api.tournament.domain.TournamentEntity
 import com.votaciones.api.tournament.domain.TournamentStatus
 import com.votaciones.api.tournament.domain.TournamentType
@@ -21,14 +23,11 @@ import com.votaciones.api.user.repository.RoleRepository
 import com.votaciones.api.user.repository.UserRepository
 import com.votaciones.api.vote.dto.CastVoteRequest
 import com.votaciones.api.vote.service.VoteService
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
-import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.transaction.annotation.Transactional
 
@@ -37,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional
 @Transactional
 class VoteServiceTest(
     @Autowired private val voteService: VoteService,
+    @Autowired private val tournamentAccessService: TournamentAccessService,
     @Autowired private val userRepository: UserRepository,
     @Autowired private val roleRepository: RoleRepository,
     @Autowired private val tournamentRepository: TournamentRepository,
@@ -45,31 +45,24 @@ class VoteServiceTest(
     @Autowired private val matchRepository: MatchRepository,
 ) {
 
-    @AfterEach
-    fun clearSecurity() {
-        SecurityContextHolder.clearContext()
-    }
-
     @Test
     fun `should prevent duplicate vote on same match`() {
         val context = createVotingContext()
-        authenticate(context.voter)
 
-        voteService.castVote(context.match.id, CastVoteRequest(selectedParticipantId = context.participantA.id))
+        voteService.castVote(context.match.id, context.sessionToken, CastVoteRequest(selectedParticipantId = context.participantA.id))
         val exception = assertThrows(ConflictException::class.java) {
-            voteService.castVote(context.match.id, CastVoteRequest(selectedParticipantId = context.participantB.id))
+            voteService.castVote(context.match.id, context.sessionToken, CastVoteRequest(selectedParticipantId = context.participantB.id))
         }
 
-        assertEquals("User has already voted on this match", exception.message)
+        assertEquals("Session has already voted on this match", exception.message)
     }
 
     @Test
     fun `should reject vote when round is not open`() {
         val context = createVotingContext(roundStatus = RoundStatus.CLOSED, matchStatus = MatchStatus.CLOSED)
-        authenticate(context.voter)
 
         val exception = assertThrows(BadRequestException::class.java) {
-            voteService.castVote(context.match.id, CastVoteRequest(selectedParticipantId = context.participantA.id))
+            voteService.castVote(context.match.id, context.sessionToken, CastVoteRequest(selectedParticipantId = context.participantA.id))
         }
 
         assertEquals("Round must be OPEN to accept votes", exception.message)
@@ -110,15 +103,14 @@ class VoteServiceTest(
                 type = TournamentType.ELIMINATION,
                 status = TournamentStatus.ACTIVE,
                 createdBy = organizer,
+                accessMode = TournamentAccessMode.DISPLAY_NAME,
+                joinPin = "123456",
+                qrToken = "qr-test-token",
             ),
         )
 
-        val participantA = participantRepository.save(
-            ParticipantEntity(tournament = tournament, name = "Participant A"),
-        )
-        val participantB = participantRepository.save(
-            ParticipantEntity(tournament = tournament, name = "Participant B"),
-        )
+        val participantA = participantRepository.save(ParticipantEntity(tournament = tournament, name = "Participant A"))
+        val participantB = participantRepository.save(ParticipantEntity(tournament = tournament, name = "Participant B"))
 
         val round = roundRepository.save(
             RoundEntity(
@@ -138,22 +130,25 @@ class VoteServiceTest(
             ),
         )
 
-        return VotingContext(voter, participantA, participantB, match)
-    }
+        val sessionToken = tournamentAccessService.joinByDisplayName(
+            JoinByDisplayNameRequest(
+                pin = tournament.joinPin,
+                displayName = voter.firstName,
+            ),
+        ).sessionToken
 
-    private fun authenticate(user: UserEntity) {
-        val principal = UserPrincipal.from(user)
-        SecurityContextHolder.getContext().authentication = UsernamePasswordAuthenticationToken(
-            principal,
-            null,
-            principal.authorities,
+        return VotingContext(
+            participantA = participantA,
+            participantB = participantB,
+            match = match,
+            sessionToken = sessionToken,
         )
     }
 
     private data class VotingContext(
-        val voter: UserEntity,
         val participantA: ParticipantEntity,
         val participantB: ParticipantEntity,
         val match: MatchEntity,
+        val sessionToken: String,
     )
 }

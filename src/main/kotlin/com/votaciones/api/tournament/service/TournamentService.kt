@@ -31,6 +31,7 @@ class TournamentService(
     private val authorizationService: AuthorizationService,
     private val auditService: AuditService,
     private val realtimeEventPublisher: RealtimeEventPublisher,
+    private val tournamentSessionTokenService: com.votaciones.api.access.service.TournamentSessionTokenService,
 ) {
 
     @Transactional
@@ -45,6 +46,9 @@ class TournamentService(
                 createdBy = currentUser,
                 startAt = request.startAt,
                 endAt = request.endAt,
+                accessMode = request.accessMode,
+                joinPin = tournamentSessionTokenService.randomPin(),
+                qrToken = tournamentSessionTokenService.randomToken(),
             ),
         )
 
@@ -82,6 +86,7 @@ class TournamentService(
         tournament.type = request.type
         tournament.startAt = request.startAt
         tournament.endAt = request.endAt
+        tournament.accessMode = request.accessMode
 
         val saved = tournamentRepository.save(tournament)
         auditService.log(

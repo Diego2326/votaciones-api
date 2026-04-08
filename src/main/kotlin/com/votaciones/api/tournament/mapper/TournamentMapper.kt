@@ -12,6 +12,7 @@ object TournamentMapper {
         description = entity.description,
         type = entity.type,
         status = entity.status,
+        accessMode = entity.accessMode,
         createdBy = UserMapper.toSummary(entity.createdBy),
         startAt = entity.startAt,
         endAt = entity.endAt,

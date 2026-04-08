@@ -17,7 +17,8 @@ data class VoteResponse(
     val tournamentId: UUID,
     val roundId: UUID,
     val matchId: UUID,
-    val voterId: UUID,
+    val voterId: UUID?,
+    val joinSessionId: UUID,
     val selectedParticipantId: UUID,
     val createdAt: Instant,
 )

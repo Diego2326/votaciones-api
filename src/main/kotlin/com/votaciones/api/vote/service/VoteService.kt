@@ -1,5 +1,6 @@
 package com.votaciones.api.vote.service
 
+import com.votaciones.api.access.service.TournamentAccessService
 import com.votaciones.api.audit.domain.AuditAction
 import com.votaciones.api.audit.domain.AuditEntityType
 import com.votaciones.api.audit.service.AuditService
@@ -13,7 +14,6 @@ import com.votaciones.api.round.domain.RoundStatus
 import com.votaciones.api.round.repository.RoundRepository
 import com.votaciones.api.security.AuthorizationService
 import com.votaciones.api.tournament.service.TournamentService
-import com.votaciones.api.user.service.UserService
 import com.votaciones.api.vote.domain.VoteEntity
 import com.votaciones.api.vote.dto.CastVoteRequest
 import com.votaciones.api.vote.dto.MatchResultsResponse
@@ -37,21 +37,22 @@ class VoteService(
     private val matchService: MatchService,
     private val roundRepository: RoundRepository,
     private val tournamentService: TournamentService,
-    private val userService: UserService,
-    private val authorizationService: AuthorizationService,
+    private val tournamentAccessService: TournamentAccessService,
     private val auditService: AuditService,
     private val realtimeEventPublisher: RealtimeEventPublisher,
 ) {
 
     @Transactional
-    fun castVote(matchId: UUID, request: CastVoteRequest): VoteResponse {
-        authorizationService.assertCanVote()
-        val currentUser = userService.getCurrentUserEntity()
+    fun castVote(matchId: UUID, sessionToken: String, request: CastVoteRequest): VoteResponse {
+        val joinSession = tournamentAccessService.getSessionByToken(sessionToken)
         val match = matchService.getEntity(matchId)
         validateVoteState(match)
+        if (joinSession.tournament.id != match.round.tournament.id) {
+            throw BadRequestException("Tournament session does not belong to this tournament")
+        }
 
-        if (voteRepository.existsByMatchIdAndVoterId(matchId, currentUser.id)) {
-            throw ConflictException("User has already voted on this match")
+        if (voteRepository.existsByMatchIdAndJoinSessionId(matchId, joinSession.id)) {
+            throw ConflictException("Session has already voted on this match")
         }
 
         val selectedParticipant = when (request.selectedParticipantId) {
@@ -66,12 +67,13 @@ class VoteService(
                     tournament = match.round.tournament,
                     round = match.round,
                     match = match,
-                    voter = currentUser,
+                    voter = joinSession.user,
+                    joinSession = joinSession,
                     selectedParticipant = selectedParticipant,
                 ),
             )
         } catch (_: DataIntegrityViolationException) {
-            throw ConflictException("User has already voted on this match")
+            throw ConflictException("Session has already voted on this match")
         }
 
         auditService.log(
@@ -82,7 +84,9 @@ class VoteService(
             details = mapOf(
                 "matchId" to match.id,
                 "selectedParticipantId" to selectedParticipant.id,
+                "joinSessionId" to joinSession.id,
             ),
+            user = joinSession.user,
         )
 
         realtimeEventPublisher.publishVoteCountUpdated(
@@ -96,9 +100,9 @@ class VoteService(
     }
 
     @Transactional(readOnly = true)
-    fun getMyVote(matchId: UUID): MyVoteResponse {
-        val user = userService.getCurrentUserEntity()
-        return VoteMapper.toMyVoteResponse(voteRepository.findByMatchIdAndVoterId(matchId, user.id))
+    fun getMyVote(matchId: UUID, sessionToken: String): MyVoteResponse {
+        val joinSession = tournamentAccessService.getSessionByToken(sessionToken)
+        return VoteMapper.toMyVoteResponse(voteRepository.findByMatchIdAndJoinSessionId(matchId, joinSession.id))
     }
 
     @Transactional(readOnly = true)

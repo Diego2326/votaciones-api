@@ -7,8 +7,8 @@ import org.springframework.data.repository.query.Param
 import java.util.UUID
 
 interface VoteRepository : JpaRepository<VoteEntity, UUID> {
-    fun existsByMatchIdAndVoterId(matchId: UUID, voterId: UUID): Boolean
-    fun findByMatchIdAndVoterId(matchId: UUID, voterId: UUID): VoteEntity?
+    fun existsByMatchIdAndJoinSessionId(matchId: UUID, joinSessionId: UUID): Boolean
+    fun findByMatchIdAndJoinSessionId(matchId: UUID, joinSessionId: UUID): VoteEntity?
     fun countByMatchId(matchId: UUID): Long
 
     @Query(

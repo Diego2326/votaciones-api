@@ -1,5 +1,6 @@
 package com.votaciones.api.tournament.dto
 
+import com.votaciones.api.access.domain.TournamentAccessMode
 import com.votaciones.api.tournament.domain.TournamentStatus
 import com.votaciones.api.tournament.domain.TournamentType
 import com.votaciones.api.user.dto.UserSummaryResponse
@@ -17,6 +18,7 @@ data class CreateTournamentRequest(
     val type: TournamentType,
     val startAt: Instant? = null,
     val endAt: Instant? = null,
+    val accessMode: TournamentAccessMode = TournamentAccessMode.ANONYMOUS,
 )
 
 data class UpdateTournamentRequest(
@@ -28,6 +30,7 @@ data class UpdateTournamentRequest(
     val type: TournamentType,
     val startAt: Instant? = null,
     val endAt: Instant? = null,
+    val accessMode: TournamentAccessMode,
 )
 
 data class TournamentResponse(
@@ -36,6 +39,7 @@ data class TournamentResponse(
     val description: String?,
     val type: TournamentType,
     val status: TournamentStatus,
+    val accessMode: TournamentAccessMode,
     val createdBy: UserSummaryResponse,
     val startAt: Instant?,
     val endAt: Instant?,

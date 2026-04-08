@@ -1,14 +1,37 @@
 services:
   postgres:
-    image: 'postgres:16'
+    image: postgres:16
+    container_name: votaciones-postgres
     environment:
-      - 'POSTGRES_DB=votaciones'
-      - 'POSTGRES_PASSWORD=votaciones'
-      - 'POSTGRES_USER=votaciones'
+      POSTGRES_DB: votaciones
+      POSTGRES_PASSWORD: votaciones
+      POSTGRES_USER: votaciones
     ports:
-      - '5432:5432'
+      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U votaciones -d votaciones"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: votaciones-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8080
+      DB_URL: jdbc:postgresql://postgres:5432/votaciones
+      DB_USERNAME: votaciones
+      DB_PASSWORD: votaciones
+      APP_CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    ports:
+      - "8080:8080"
 
 volumes:
   postgres-data:
