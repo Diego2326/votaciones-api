@@ -21,6 +21,18 @@ class AuthController(
     private val authService: AuthService,
 ) {
 
+    @GetMapping("/register")
+    fun registerInfo(): ResponseEntity<ApiResponse<Any>> = ResponseEntity.ok(
+        ApiResponse(
+            message = "Send a POST request to register a user",
+            data = mapOf(
+                "method" to "POST",
+                "path" to "/api/v1/auth/register",
+                "requiredFields" to listOf("username", "email", "password", "firstName", "lastName"),
+            ),
+        ),
+    )
+
     @PostMapping("/register")
     fun register(@Valid @RequestBody request: RegisterRequest): ResponseEntity<ApiResponse<Any>> = ResponseEntity
         .status(HttpStatus.CREATED)

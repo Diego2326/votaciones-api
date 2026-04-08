@@ -26,6 +26,21 @@ class AuthIntegrationTest(
 ) {
 
     @Test
+    fun `register endpoint exposes get contract`() {
+        val response = client()
+            .get()
+            .uri("/api/v1/auth/register")
+            .retrieve()
+            .toEntity(String::class.java)
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+        val body = readJson(response.body!!)
+        assertEquals("Send a POST request to register a user", body.path("message").asText())
+        assertEquals("POST", body.path("data").path("method").asText())
+        assertEquals("/api/v1/auth/register", body.path("data").path("path").asText())
+    }
+
+    @Test
     fun `register then access me endpoint`() {
         val registerResponse = post(
             "/api/v1/auth/register",

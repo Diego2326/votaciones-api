@@ -13,6 +13,7 @@ import org.springframework.validation.FieldError
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.HttpRequestMethodNotSupportedException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -81,6 +82,16 @@ class GlobalExceptionHandler {
     ): ResponseEntity<ErrorResponse> = buildResponse(
         status = HttpStatus.BAD_REQUEST,
         message = exception.message ?: "Malformed request body",
+        path = request.requestURI,
+    )
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException::class)
+    fun handleMethodNotSupported(
+        exception: HttpRequestMethodNotSupportedException,
+        request: HttpServletRequest,
+    ): ResponseEntity<ErrorResponse> = buildResponse(
+        status = HttpStatus.METHOD_NOT_ALLOWED,
+        message = exception.message ?: "Request method is not supported",
         path = request.requestURI,
     )
 
