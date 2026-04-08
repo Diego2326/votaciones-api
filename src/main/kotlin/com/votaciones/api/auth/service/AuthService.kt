@@ -49,8 +49,8 @@ class AuthService(
             throw ConflictException("Email is already in use")
         }
 
-        val voterRole = roleRepository.findByName(RoleName.VOTER)
-            ?: throw NotFoundException("Default VOTER role not found")
+        val organizerRole = roleRepository.findByName(RoleName.ORGANIZER)
+            ?: throw NotFoundException("Default ORGANIZER role not found")
 
         val user = userRepository.save(
             UserEntity(
@@ -60,7 +60,7 @@ class AuthService(
                 firstName = request.firstName.trim(),
                 lastName = request.lastName.trim(),
                 enabled = true,
-                roles = mutableSetOf(voterRole),
+                roles = mutableSetOf(organizerRole),
             ),
         )
 

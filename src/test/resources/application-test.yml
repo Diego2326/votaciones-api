@@ -24,3 +24,4 @@ app:
     refresh-token-ttl: P7D
   cors:
     allowed-origins: http://localhost:3000
+    allowed-origin-patterns: http://localhost:*

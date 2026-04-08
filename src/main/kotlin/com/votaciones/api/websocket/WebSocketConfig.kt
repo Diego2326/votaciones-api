@@ -20,8 +20,12 @@ class WebSocketConfig(
     }
 
     override fun registerStompEndpoints(registry: StompEndpointRegistry) {
+        val allowedOriginPatterns = corsProperties.allowedOriginPatterns
+            .ifEmpty { corsProperties.allowedOrigins }
+            .ifEmpty { listOf("*") }
+
         registry.addEndpoint("/ws")
-            .setAllowedOriginPatterns(*corsProperties.allowedOrigins.ifEmpty { listOf("*") }.toTypedArray())
+            .setAllowedOriginPatterns(*allowedOriginPatterns.toTypedArray())
             .withSockJS()
     }
 }

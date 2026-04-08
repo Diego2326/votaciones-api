@@ -152,6 +152,14 @@ Respuesta importante:
 - `data.tokens.refreshToken`
 - `data.user`
 
+### Registro de organizador
+
+```http
+POST /api/v1/auth/register
+```
+
+Esta ruta crea una cuenta con rol `ORGANIZER`, pensada para el panel que crea y administra torneos.
+
 ### Crear torneo
 
 ```http
