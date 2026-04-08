@@ -28,6 +28,7 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	implementation("org.springframework.boot:spring-boot-starter-websocket")
 	implementation("io.jsonwebtoken:jjwt-api:0.12.7")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0")
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("tools.jackson.module:jackson-module-kotlin")

@@ -35,6 +35,7 @@ class SecurityConfig(
             }
             .authorizeHttpRequests {
                 it.requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
+                it.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 it.requestMatchers("/actuator/health").permitAll()
                 it.requestMatchers("/ws/**").permitAll()
                 it.requestMatchers("/api/v1/matches/*/my-vote").authenticated()
