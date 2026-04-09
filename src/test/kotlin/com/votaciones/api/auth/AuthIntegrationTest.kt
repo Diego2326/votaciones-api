@@ -9,6 +9,7 @@ import com.votaciones.api.tournament.domain.TournamentType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -19,6 +20,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.web.client.RestClient
+import org.springframework.web.client.HttpClientErrorException
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -106,6 +108,45 @@ class AuthIntegrationTest(
 
         assertEquals(HttpStatus.CREATED, createResponse.statusCode)
         assertEquals("Organizer Tournament", readJson(createResponse.body!!).path("data").path("title").asText())
+    }
+
+    @Test
+    fun `tournament creation returns field error when title is missing`() {
+        val registerResponse = post(
+            "/api/v1/auth/register",
+            RegisterRequest(
+                username = "organizer_missing_title_test",
+                email = "organizer_missing_title_test@example.com",
+                password = "Password123!",
+                firstName = "Missing",
+                lastName = "Title",
+            ),
+        )
+
+        assertEquals(HttpStatus.CREATED, registerResponse.statusCode)
+        val accessToken = readJson(registerResponse.body!!).path("data").path("tokens").path("accessToken").asText()
+
+        val exception = assertThrows(HttpClientErrorException.BadRequest::class.java) {
+            client()
+                .post()
+                .uri("/api/v1/tournaments")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(
+                    mapOf(
+                        "description" to "Created without title",
+                        "type" to TournamentType.POLL.name,
+                    ),
+                )
+                .retrieve()
+                .toEntity(String::class.java)
+        }
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.statusCode)
+        val body = readJson(exception.responseBodyAsString)
+        assertEquals("Validation failed", body.path("message").asText())
+        assertEquals("title", body.path("errors").path(0).path("field").asText())
+        assertEquals("is required", body.path("errors").path(0).path("message").asText())
     }
 
     @Test

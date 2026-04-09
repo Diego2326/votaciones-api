@@ -14,6 +14,12 @@ import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.HttpRequestMethodNotSupportedException
+import tools.jackson.core.JacksonException
+import tools.jackson.databind.exc.InvalidFormatException
+import tools.jackson.databind.exc.InvalidNullException
+import tools.jackson.databind.exc.MismatchedInputException
+import tools.jackson.databind.exc.PropertyBindingException
+import tools.jackson.module.kotlin.KotlinInvalidNullException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -79,11 +85,19 @@ class GlobalExceptionHandler {
     fun handleNotReadable(
         exception: HttpMessageNotReadableException,
         request: HttpServletRequest,
-    ): ResponseEntity<ErrorResponse> = buildResponse(
-        status = HttpStatus.BAD_REQUEST,
-        message = exception.message ?: "Malformed request body",
-        path = request.requestURI,
-    )
+    ): ResponseEntity<ErrorResponse> {
+        val errors = extractReadErrors(exception)
+        return buildResponse(
+            status = HttpStatus.BAD_REQUEST,
+            message = if (errors.isEmpty()) {
+                exception.message ?: "Malformed request body"
+            } else {
+                "Validation failed"
+            },
+            path = request.requestURI,
+            errors = errors,
+        )
+    }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException::class)
     fun handleMethodNotSupported(
@@ -118,4 +132,48 @@ class GlobalExceptionHandler {
             errors = errors,
         ),
     )
+
+    private fun extractReadErrors(exception: HttpMessageNotReadableException): List<ValidationError> {
+        exception.causeChain().filterIsInstance<KotlinInvalidNullException>().firstOrNull()?.let { error ->
+            return listOf(ValidationError(error.kotlinPropertyName ?: extractPath(error), "is required"))
+        }
+
+        exception.causeChain().filterIsInstance<InvalidNullException>().firstOrNull()?.let { error ->
+            return listOf(ValidationError(error.propertyName?.simpleName ?: extractPath(error), "is required"))
+        }
+
+        exception.causeChain().filterIsInstance<PropertyBindingException>().firstOrNull()?.let { error ->
+            return listOf(ValidationError(error.propertyName, "is not allowed"))
+        }
+
+        exception.causeChain().filterIsInstance<InvalidFormatException>().firstOrNull()?.let { error ->
+            return listOf(ValidationError(extractPath(error), invalidFormatMessage(error)))
+        }
+
+        exception.causeChain().filterIsInstance<MismatchedInputException>().firstOrNull()?.let { error ->
+            return listOf(ValidationError(extractPath(error), "has an invalid value"))
+        }
+
+        return emptyList()
+    }
+
+    private fun invalidFormatMessage(exception: InvalidFormatException): String {
+        val targetType = exception.targetType
+        if (targetType != null && targetType.isEnum) {
+            val enumValues = targetType.enumConstants?.joinToString(", ")
+            if (!enumValues.isNullOrBlank()) {
+                return "must be one of [$enumValues]"
+            }
+        }
+        return "has an invalid format"
+    }
+
+    private fun extractPath(exception: JacksonException): String? = exception.path
+        ?.mapNotNull { reference ->
+            reference.propertyName ?: reference.index.takeIf { it >= 0 }?.toString()
+        }
+        ?.takeIf { it.isNotEmpty() }
+        ?.joinToString(".")
+
+    private fun Throwable.causeChain(): Sequence<Throwable> = generateSequence(this) { it.cause }
 }
