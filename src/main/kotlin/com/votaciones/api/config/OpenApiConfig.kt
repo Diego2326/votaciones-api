@@ -31,8 +31,8 @@ class OpenApiConfig {
                     )
                     .license(
                         License()
-                            .name("Proprietary")
-                            .url("https://example.com/license"),
+                            .name("MIT")
+                            .url("https://opensource.org/licenses/MIT"),
                     ),
             )
             .addSecurityItem(SecurityRequirement().addList(securitySchemeName))

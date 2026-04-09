@@ -2,73 +2,55 @@
 
 Backend en Kotlin + Spring Boot para torneos, encuestas y brackets competitivos.
 
-Este README esta orientado a quien va a construir el frontend en React + Vite.
+Licencia: MIT. Ver [LICENSE](./LICENSE).
 
 ## Stack
 
-- Backend: Kotlin + Spring Boot
-- DB: PostgreSQL
-- Auth organizador/admin: JWT
-- Acceso votante: PIN/QR + session token por torneo
-- Tiempo real: WebSocket + STOMP
-- Docs API: Swagger / OpenAPI
+- Kotlin + Spring Boot
+- PostgreSQL + Flyway
+- JWT para admin y organizer
+- Session token por torneo para votantes
+- WebSocket + STOMP + SockJS para eventos en tiempo real
+- Swagger / OpenAPI para exploracion manual
 
 ## URLs locales
 
 - API: `http://localhost:8080`
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+- Healthcheck: `http://localhost:8080/actuator/health`
+- WebSocket SockJS/STOMP: `ws://localhost:8080/ws`
 
-## Levantar entorno
+## Levantar el proyecto
 
-### Base de datos + API con Docker
+### Con Docker
 
 ```bash
 docker compose up -d
 ```
 
-### Solo PostgreSQL + API local
+### PostgreSQL en Docker + API local
 
 ```bash
 docker compose up -d postgres
 ./gradlew bootRun
 ```
 
-## Modelo de frontend recomendado
+### Tests
 
-Se recomienda separar dos apps o al menos dos shells principales:
+```bash
+./gradlew test
+```
 
-1. Panel organizador
-   Usa JWT con login normal.
+## Modelos de autenticacion
 
-2. Web votantes
-   Usa acceso por PIN o QR.
-   No depende de JWT salvo en torneos configurados como `EMAIL_PASSWORD`.
+La API usa tres modelos distintos:
 
-## Tipos de acceso para votantes
+### 1. Publico
 
-Cada torneo tiene un `accessMode`:
+No requiere headers de autenticacion.
 
-- `ANONYMOUS`
-  El usuario entra por QR o PIN y obtiene una sesion sin identificarse.
-
-- `DISPLAY_NAME`
-  El usuario entra por PIN o QR y envia solo su nombre.
-
-- `EMAIL_PASSWORD`
-  El usuario entra por PIN o QR y autentica con correo y password.
-  Si no existe usuario, el backend lo crea automaticamente con rol `VOTER`.
-
-## Conceptos clave para frontend
-
-### 1. JWT de organizador/admin
-
-Se usa para:
-
-- crear torneos
-- editar torneos
-- configurar acceso del torneo
-- administrar rondas, matches, participantes
+### 2. JWT
 
 Header:
 
@@ -76,13 +58,17 @@ Header:
 Authorization: Bearer <accessToken>
 ```
 
-### 2. Session token del votante
-
 Se usa para:
 
-- votar
-- consultar si ya voto
-- mantener presencia en el torneo
+- auth del panel
+- CRUD de torneos
+- acceso de administracion
+- usuarios
+- auditoria
+
+Nota: un `ORGANIZER` solo puede administrar torneos creados por el mismo. Un `ADMIN` puede administrar cualquiera.
+
+### 3. Sesion de torneo
 
 Header:
 
@@ -90,128 +76,205 @@ Header:
 X-Tournament-Session: <sessionToken>
 ```
 
-Este token no reemplaza JWT. Es una sesion de acceso al torneo.
+Se usa para:
 
-Recomendacion frontend:
+- votar
+- consultar el voto propio
+- restaurar y mantener viva la sesion del votante
 
-- guardar `accessToken` del organizador en almacenamiento seguro del panel
-- guardar `sessionToken` del votante en `localStorage` o `sessionStorage`
-- asociar `sessionToken` al `tournamentId`
+## Envelope de respuestas
 
-## Respuesta base de la API
-
-La API responde en este envelope:
+Exito:
 
 ```json
 {
   "success": true,
   "message": "optional",
   "data": {},
-  "timestamp": "2026-04-08T15:00:00Z"
+  "timestamp": "2026-04-09T12:00:00Z"
 }
 ```
 
-Errores:
+Error:
 
 ```json
 {
   "success": false,
   "status": 400,
   "message": "Validation failed",
-  "path": "/api/v1/join/name",
+  "path": "/api/v1/tournaments",
   "errors": [
     {
-      "field": "displayName",
-      "message": "must not be blank"
+      "field": "title",
+      "message": "is required"
     }
   ],
-  "timestamp": "2026-04-08T15:00:00Z"
+  "timestamp": "2026-04-09T12:00:00Z"
 }
 ```
 
-## Flujo del panel organizador
+## Enums relevantes
 
-### Login
+### TournamentType
 
-```http
-POST /api/v1/auth/login
-```
+- `ELIMINATION`
+- `ROUND_BASED`
+- `POLL`
+- `BRACKET`
 
-Body:
+### TournamentStatus
+
+- `DRAFT`
+- `PUBLISHED`
+- `ACTIVE`
+- `PAUSED`
+- `CLOSED`
+- `FINISHED`
+- `CANCELLED`
+
+### TournamentAccessMode
+
+- `EMAIL_PASSWORD`
+- `DISPLAY_NAME`
+- `ANONYMOUS`
+
+### RoundStatus
+
+- `PENDING`
+- `OPEN`
+- `CLOSED`
+- `PROCESSING`
+- `PUBLISHED`
+
+### MatchStatus
+
+- `PENDING`
+- `OPEN`
+- `CLOSED`
+- `RESOLVED`
+- `TIED`
+- `CANCELLED`
+
+### RoleName
+
+- `ADMIN`
+- `ORGANIZER`
+- `VOTER`
+
+## Referencia completa de endpoints
+
+Leyenda:
+
+- `Publico`: sin autenticacion
+- `JWT`: requiere `Authorization: Bearer <token>`
+- `Sesion`: requiere `X-Tournament-Session: <token>`
+
+### Auth
+
+| Metodo | Ruta | Auth | Body |
+| --- | --- | --- | --- |
+| GET | `/api/v1/auth/register` | Publico | Sin body |
+| POST | `/api/v1/auth/register` | Publico | `username`, `email`, `password`, `firstName`, `lastName` |
+| POST | `/api/v1/auth/login` | Publico | `usernameOrEmail`, `password` |
+| POST | `/api/v1/auth/refresh` | Publico | `refreshToken` |
+| GET | `/api/v1/auth/me` | JWT | Sin body |
+
+#### POST /api/v1/auth/register
 
 ```json
 {
-  "usernameOrEmail": "admin@example.com",
+  "username": "organizer01",
+  "email": "organizer@example.com",
+  "password": "Password123!",
+  "firstName": "Diego",
+  "lastName": "Perez"
+}
+```
+
+Reglas:
+
+- `username`: 3 a 64 caracteres
+- `email`: email valido, maximo 128
+- `password`: 8 a 72 caracteres
+- `firstName`: maximo 100
+- `lastName`: maximo 100
+
+#### POST /api/v1/auth/login
+
+```json
+{
+  "usernameOrEmail": "organizer01",
   "password": "Password123!"
 }
 ```
 
-Respuesta importante:
-
-- `data.tokens.accessToken`
-- `data.tokens.refreshToken`
-- `data.user`
-
-### Registro de organizador
-
-```http
-POST /api/v1/auth/register
-```
-
-Esta ruta crea una cuenta con rol `ORGANIZER`, pensada para el panel que crea y administra torneos.
-
-### Crear torneo
-
-```http
-POST /api/v1/tournaments
-Authorization: Bearer <token>
-```
-
-Body ejemplo:
+#### POST /api/v1/auth/refresh
 
 ```json
 {
-  "title": "Mejor pelicula",
+  "refreshToken": "token"
+}
+```
+
+### Torneos
+
+| Metodo | Ruta | Auth | Body / Query |
+| --- | --- | --- | --- |
+| POST | `/api/v1/tournaments` | JWT (`ADMIN`, `ORGANIZER`) | `title`, `description?`, `type`, `startAt?`, `endAt?`, `accessMode?` |
+| GET | `/api/v1/tournaments` | Publico | Query: `status?`, `page=0`, `size=20` |
+| GET | `/api/v1/tournaments/{id}` | Publico | Sin body |
+| PUT | `/api/v1/tournaments/{id}` | JWT (`ADMIN`, `ORGANIZER`) | Igual a create, pero `accessMode` es requerido |
+| PATCH | `/api/v1/tournaments/{id}/publish` | JWT (`ADMIN`, `ORGANIZER`) | Sin body |
+| PATCH | `/api/v1/tournaments/{id}/activate` | JWT (`ADMIN`, `ORGANIZER`) | Sin body |
+| PATCH | `/api/v1/tournaments/{id}/pause` | JWT (`ADMIN`, `ORGANIZER`) | Sin body |
+| PATCH | `/api/v1/tournaments/{id}/close` | JWT (`ADMIN`, `ORGANIZER`) | Sin body |
+
+#### POST /api/v1/tournaments
+
+```json
+{
+  "title": "Mejor pelicula 2026",
   "description": "Bracket de peliculas",
   "type": "BRACKET",
-  "accessMode": "DISPLAY_NAME",
-  "startAt": null,
-  "endAt": null
+  "startAt": "2026-04-10T18:00:00Z",
+  "endAt": "2026-04-17T18:00:00Z",
+  "accessMode": "DISPLAY_NAME"
 }
 ```
 
-### Configurar acceso del torneo
+Reglas:
 
-Obtener config:
+- `title`: requerido, no vacio, maximo 160
+- `description`: opcional, maximo 4000
+- `type`: requerido
+- `startAt`: opcional, `Instant` ISO-8601
+- `endAt`: opcional, `Instant` ISO-8601
+- `accessMode`: opcional, por defecto `ANONYMOUS`
+- `endAt` no puede ser menor que `startAt`
 
-```http
-GET /api/v1/tournaments/{tournamentId}/access
-Authorization: Bearer <token>
-```
+Reglas de negocio:
 
-Respuesta:
+- publicar requiere al menos 2 participantes activos
+- un torneo `ACTIVE`, `CLOSED`, `FINISHED` o `CANCELLED` ya no es editable
+- `activate` solo permite pasar desde `PUBLISHED` o `PAUSED`
+- `pause` solo permite pasar desde `ACTIVE`
+- `close` solo permite pasar desde `ACTIVE`, `PAUSED` o `PUBLISHED`
 
-```json
-{
-  "success": true,
-  "data": {
-    "tournamentId": "uuid",
-    "mode": "DISPLAY_NAME",
-    "joinPin": "483271",
-    "qrToken": "token-largo",
-    "joinUrl": "http://localhost:3000/join/token-largo"
-  }
-}
-```
+### Acceso al torneo y flujo de join
 
-Actualizar modo:
+| Metodo | Ruta | Auth | Body |
+| --- | --- | --- | --- |
+| GET | `/api/v1/tournaments/{tournamentId}/access` | JWT (`ADMIN`, `ORGANIZER`) | Sin body |
+| PATCH | `/api/v1/tournaments/{tournamentId}/access` | JWT (`ADMIN`, `ORGANIZER`) | `mode` |
+| PATCH | `/api/v1/tournaments/{tournamentId}/regenerate-pin` | JWT (`ADMIN`, `ORGANIZER`) | Sin body |
+| POST | `/api/v1/join/pin` | Publico | `pin` |
+| POST | `/api/v1/join/qr/info` | Publico | `qrToken` |
+| POST | `/api/v1/join/name` | Publico | `displayName` y uno de `pin` o `qrToken` |
+| POST | `/api/v1/join/qr` | Publico | `qrToken` |
+| POST | `/api/v1/join/auth` | Publico | `email`, `password` y uno de `pin` o `qrToken` |
+| GET | `/api/v1/join/me` | Sesion | Sin body |
 
-```http
-PATCH /api/v1/tournaments/{tournamentId}/access
-Authorization: Bearer <token>
-```
-
-Body:
+#### PATCH /api/v1/tournaments/{tournamentId}/access
 
 ```json
 {
@@ -219,61 +282,7 @@ Body:
 }
 ```
 
-Regenerar PIN + QR:
-
-```http
-PATCH /api/v1/tournaments/{tournamentId}/regenerate-pin
-Authorization: Bearer <token>
-```
-
-### QR en frontend
-
-El backend no genera la imagen QR.
-
-El backend genera:
-
-- `qrToken`
-- `joinUrl`
-
-El frontend del organizador debe renderizar un QR con `joinUrl`.
-
-En React + Vite puedes usar una libreria como:
-
-- `qrcode.react`
-- `react-qr-code`
-
-Recomendacion:
-
-- mostrar tambien el PIN grande en pantalla
-- mostrar QR y PIN simultaneamente
-
-## Flujo de la web votantes
-
-## Ruta de entrada recomendada
-
-Recomendacion en React Router:
-
-- `/`
-  pantalla para ingresar PIN
-
-- `/join/:qrToken`
-  pantalla abierta por QR
-
-- `/tournament/:tournamentId/lobby`
-  lobby del torneo
-
-- `/tournament/:tournamentId/match/:matchId`
-  pantalla de votacion
-
-## Escenario A: entrar por PIN
-
-### 1. Resolver torneo por PIN
-
-```http
-POST /api/v1/join/pin
-```
-
-Body:
+#### POST /api/v1/join/pin
 
 ```json
 {
@@ -281,36 +290,9 @@ Body:
 }
 ```
 
-Respuesta:
+Regla: `pin` entre 4 y 12 caracteres.
 
-```json
-{
-  "success": true,
-  "data": {
-    "tournamentId": "uuid",
-    "mode": "DISPLAY_NAME",
-    "joinPin": "483271",
-    "qrToken": "token-largo",
-    "joinUrl": "http://localhost:3000/join/token-largo"
-  }
-}
-```
-
-Con `mode`, el frontend decide la siguiente pantalla:
-
-- `ANONYMOUS` -> entrar directamente
-- `DISPLAY_NAME` -> pedir nombre
-- `EMAIL_PASSWORD` -> pedir correo y password
-
-## Escenario B: entrar por QR
-
-### 1. Resolver torneo por QR
-
-```http
-POST /api/v1/join/qr/info
-```
-
-Body:
+#### POST /api/v1/join/qr/info
 
 ```json
 {
@@ -318,15 +300,7 @@ Body:
 }
 ```
 
-El frontend usa la misma logica por `mode`.
-
-## Crear sesion votante
-
-### Modo `DISPLAY_NAME`
-
-```http
-POST /api/v1/join/name
-```
+#### POST /api/v1/join/name
 
 Con PIN:
 
@@ -346,13 +320,13 @@ Con QR:
 }
 ```
 
-### Modo `ANONYMOUS`
+Reglas:
 
-```http
-POST /api/v1/join/qr
-```
+- `displayName`: requerido, maximo 120
+- `pin`: opcional, pero si se usa debe medir 4 a 12
+- enviar `pin` o `qrToken`
 
-Body:
+#### POST /api/v1/join/qr
 
 ```json
 {
@@ -360,11 +334,7 @@ Body:
 }
 ```
 
-### Modo `EMAIL_PASSWORD`
-
-```http
-POST /api/v1/join/auth
-```
+#### POST /api/v1/join/auth
 
 Con PIN:
 
@@ -388,68 +358,164 @@ Con QR:
 }
 ```
 
-### Respuesta de sesion
+Reglas:
+
+- `email`: requerido y valido
+- `password`: requerido, 8 a 72
+- `firstName`: opcional, maximo 100
+- `lastName`: opcional, maximo 100
+- enviar `pin` o `qrToken`
+
+#### Respuesta relevante de join
 
 ```json
 {
   "success": true,
+  "message": "Tournament session created",
   "data": {
     "tournamentId": "uuid",
-    "tournamentTitle": "Mejor pelicula",
+    "tournamentTitle": "Mejor pelicula 2026",
     "mode": "DISPLAY_NAME",
     "sessionToken": "token-largo",
     "displayName": "Diego",
     "userId": null,
-    "joinedAt": "2026-04-08T15:00:00Z",
+    "joinedAt": "2026-04-09T12:00:00Z",
     "expiresAt": null
   }
 }
 ```
 
-Guardar:
+Guardar como minimo:
 
 - `sessionToken`
 - `tournamentId`
 - `displayName`
 
-## Mantener sesion de votante
+### Participantes
 
-```http
-GET /api/v1/join/me
-X-Tournament-Session: <sessionToken>
+| Metodo | Ruta | Auth | Body |
+| --- | --- | --- | --- |
+| POST | `/api/v1/tournaments/{tournamentId}/participants` | JWT (`ADMIN`, `ORGANIZER`) | `name`, `description?`, `imageUrl?`, `active?` |
+| GET | `/api/v1/tournaments/{tournamentId}/participants` | JWT | Sin body |
+| PUT | `/api/v1/participants/{id}` | JWT (`ADMIN`, `ORGANIZER`) | `name`, `description?`, `imageUrl?`, `active?` |
+| DELETE | `/api/v1/participants/{id}` | JWT (`ADMIN`, `ORGANIZER`) | Sin body |
+
+#### Body de create/update participante
+
+```json
+{
+  "name": "Pelicula A",
+  "description": "Descripcion opcional",
+  "imageUrl": "https://example.com/poster.jpg",
+  "active": true
+}
 ```
 
-Esto sirve para:
+Reglas:
 
-- restaurar sesion al refrescar la pagina
-- actualizar `lastSeenAt`
-- validar que la sesion sigue viva
+- `name`: requerido, maximo 160
+- `description`: opcional, maximo 4000
+- `imageUrl`: opcional, maximo 500
+- `DELETE` hace soft delete: el participante se marca inactivo
 
-## Obtener torneos, rondas, matches y participantes
+### Rondas
 
-Lecturas publicas:
+| Metodo | Ruta | Auth | Body |
+| --- | --- | --- | --- |
+| POST | `/api/v1/tournaments/{tournamentId}/rounds` | JWT (`ADMIN`, `ORGANIZER`) | `name`, `roundNumber`, `opensAt?`, `closesAt?` |
+| GET | `/api/v1/tournaments/{tournamentId}/rounds` | JWT | Sin body |
+| GET | `/api/v1/rounds/{id}` | Publico | Sin body |
+| PATCH | `/api/v1/rounds/{id}/open` | JWT (`ADMIN`, `ORGANIZER`) | Sin body |
+| PATCH | `/api/v1/rounds/{id}/close` | JWT (`ADMIN`, `ORGANIZER`) | Sin body |
+| PATCH | `/api/v1/rounds/{id}/process` | JWT (`ADMIN`, `ORGANIZER`) | Sin body |
+| PATCH | `/api/v1/rounds/{id}/publish-results` | JWT (`ADMIN`, `ORGANIZER`) | Sin body |
 
-```http
-GET /api/v1/tournaments
-GET /api/v1/tournaments/{id}
-GET /api/v1/tournaments/{tournamentId}/participants
-GET /api/v1/tournaments/{tournamentId}/rounds
-GET /api/v1/rounds/{id}
-GET /api/v1/rounds/{roundId}/matches
-GET /api/v1/matches/{id}
-GET /api/v1/matches/{matchId}/results
-GET /api/v1/rounds/{roundId}/results
-GET /api/v1/tournaments/{tournamentId}/results
+#### POST /api/v1/tournaments/{tournamentId}/rounds
+
+```json
+{
+  "name": "Cuartos de final",
+  "roundNumber": 1,
+  "opensAt": "2026-04-10T18:00:00Z",
+  "closesAt": "2026-04-10T21:00:00Z"
+}
 ```
 
-## Votar
+Reglas:
 
-```http
-POST /api/v1/matches/{matchId}/vote
-X-Tournament-Session: <sessionToken>
+- `name`: requerido, maximo 120
+- `roundNumber`: requerido, entero positivo
+- `closesAt` no puede ser menor que `opensAt`
+- no se puede repetir `roundNumber` dentro del mismo torneo
+- `open` solo funciona en rondas `PENDING`
+- `close` solo funciona en rondas `OPEN`
+- `process` solo funciona en rondas `CLOSED` o `PROCESSING`
+- `publish-results` solo funciona en rondas `PROCESSING`
+
+### Matches
+
+| Metodo | Ruta | Auth | Body |
+| --- | --- | --- | --- |
+| POST | `/api/v1/rounds/{roundId}/matches` | JWT (`ADMIN`, `ORGANIZER`) | `autoGenerate` y/o `matches[]` |
+| GET | `/api/v1/rounds/{roundId}/matches` | JWT | Sin body |
+| GET | `/api/v1/matches/{id}` | Publico | Sin body |
+| PATCH | `/api/v1/matches/{id}/winner` | JWT (`ADMIN`, `ORGANIZER`) | `winnerId` |
+
+#### POST /api/v1/rounds/{roundId}/matches manual
+
+```json
+{
+  "autoGenerate": false,
+  "matches": [
+    {
+      "participantAId": "uuid-a",
+      "participantBId": "uuid-b"
+    },
+    {
+      "participantAId": "uuid-c",
+      "participantBId": "uuid-d"
+    }
+  ]
+}
 ```
 
-Body:
+#### POST /api/v1/rounds/{roundId}/matches auto
+
+```json
+{
+  "autoGenerate": true,
+  "matches": []
+}
+```
+
+Reglas:
+
+- si `autoGenerate` es `true`, el backend empareja participantes activos de 2 en 2
+- auto-generacion requiere cantidad par de participantes activos
+- si `autoGenerate` es `false`, debes enviar `matches`
+- la ronda debe estar en `PENDING`
+- un match no puede usar el mismo participante dos veces
+- ambos participantes deben pertenecer al torneo y estar activos
+
+#### PATCH /api/v1/matches/{id}/winner
+
+```json
+{
+  "winnerId": "participant-uuid"
+}
+```
+
+### Votos y resultados
+
+| Metodo | Ruta | Auth | Body |
+| --- | --- | --- | --- |
+| POST | `/api/v1/matches/{matchId}/vote` | Sesion | `selectedParticipantId` |
+| GET | `/api/v1/matches/{matchId}/results` | Publico | Sin body |
+| GET | `/api/v1/rounds/{roundId}/results` | Publico | Sin body |
+| GET | `/api/v1/tournaments/{tournamentId}/results` | JWT | Sin body |
+| GET | `/api/v1/matches/{matchId}/my-vote` | Sesion | Sin body |
+
+#### POST /api/v1/matches/{matchId}/vote
 
 ```json
 {
@@ -457,33 +523,18 @@ Body:
 }
 ```
 
-Respuesta:
+Reglas:
 
-```json
-{
-  "success": true,
-  "message": "Vote recorded",
-  "data": {
-    "id": "vote-uuid",
-    "tournamentId": "uuid",
-    "roundId": "uuid",
-    "matchId": "uuid",
-    "voterId": null,
-    "joinSessionId": "uuid",
-    "selectedParticipantId": "uuid",
-    "createdAt": "2026-04-08T15:00:00Z"
-  }
-}
-```
+- `selectedParticipantId`: requerido
+- la sesion solo sirve para su propio torneo
+- no se puede votar dos veces en el mismo match con la misma sesion
+- el torneo debe estar `ACTIVE`
+- la ronda debe estar `OPEN`
+- el match debe estar `OPEN`
 
-## Saber si ya voto
+#### GET /api/v1/matches/{matchId}/my-vote
 
-```http
-GET /api/v1/matches/{matchId}/my-vote
-X-Tournament-Session: <sessionToken>
-```
-
-Respuesta:
+Respuesta tipica:
 
 ```json
 {
@@ -491,31 +542,78 @@ Respuesta:
   "data": {
     "hasVoted": true,
     "selectedParticipantId": "uuid",
-    "votedAt": "2026-04-08T15:00:00Z"
+    "votedAt": "2026-04-09T12:00:00Z"
   }
 }
 ```
 
-## Reglas de negocio que el frontend debe asumir
+### Usuarios
 
-- no se puede votar dos veces en el mismo match con la misma sesion
-- la ronda debe estar `OPEN`
-- el torneo debe estar `ACTIVE`
-- el match debe estar `OPEN`
-- una sesion de torneo solo sirve para su propio torneo
+Todos los endpoints de esta seccion requieren JWT con rol `ADMIN`.
 
-## WebSocket en frontend
+| Metodo | Ruta | Auth | Body / Query |
+| --- | --- | --- | --- |
+| GET | `/api/v1/users` | JWT (`ADMIN`) | Query: `page=0`, `size=20` |
+| GET | `/api/v1/users/{id}` | JWT (`ADMIN`) | Sin body |
+| PATCH | `/api/v1/users/{id}/status` | JWT (`ADMIN`) | `enabled` |
+| PATCH | `/api/v1/users/{id}/roles` | JWT (`ADMIN`) | `roles[]` |
 
-Endpoint:
+#### PATCH /api/v1/users/{id}/status
 
-- SockJS/STOMP endpoint: `/ws`
+```json
+{
+  "enabled": true
+}
+```
 
-Topics disponibles:
+#### PATCH /api/v1/users/{id}/roles
+
+```json
+{
+  "roles": ["ORGANIZER", "VOTER"]
+}
+```
+
+### Auditoria
+
+| Metodo | Ruta | Auth | Query |
+| --- | --- | --- | --- |
+| GET | `/api/v1/audit` | JWT (`ADMIN`) | `page=0`, `size=20` |
+| GET | `/api/v1/tournaments/{tournamentId}/audit` | JWT (`ADMIN`, `ORGANIZER`) | `page=0`, `size=20` |
+
+Nota: en la auditoria por torneo, un `ORGANIZER` solo puede consultar torneos que administra.
+
+### Docs, health y WebSocket
+
+| Metodo | Ruta | Auth | Uso |
+| --- | --- | --- | --- |
+| GET | `/swagger-ui.html` | Publico | Swagger UI |
+| GET | `/swagger-ui/**` | Publico | Assets de Swagger |
+| GET | `/v3/api-docs/**` | Publico | OpenAPI JSON |
+| GET | `/actuator/health` | Publico | Healthcheck |
+| GET | `/ws` | Publico | Handshake SockJS/STOMP |
+
+## WebSocket en tiempo real
+
+Endpoint de conexion:
+
+- `/ws`
+
+Broker destinations:
+
+- `/topic/**`
+- `/queue/**`
+
+Prefijo de envio del cliente:
+
+- `/app/**`
+
+Topics usados por el backend:
 
 - `/topic/tournament/{tournamentId}`
 - `/topic/tournament/{tournamentId}/round/{roundId}`
 
-Eventos posibles:
+Eventos emitidos:
 
 - `TOURNAMENT_UPDATED`
 - `ROUND_OPENED`
@@ -536,151 +634,48 @@ Payload base:
   "payload": {
     "totalVotes": 20
   },
-  "emittedAt": "2026-04-08T15:00:00Z"
+  "emittedAt": "2026-04-09T12:00:00Z"
 }
 ```
 
-### Recomendacion React
+## Flujo sugerido para frontend
 
-- usa STOMP client
-- al entrar al lobby del torneo, suscribete a `/topic/tournament/{tournamentId}`
-- al abrir una ronda concreta, suscribete tambien a `/topic/tournament/{tournamentId}/round/{roundId}`
-- ante `VOTE_COUNT_UPDATED`, refresca resultados o contador
-- ante `ROUND_OPENED`, `ROUND_CLOSED`, `RESULTS_PUBLISHED`, invalida cache y vuelve a consultar API
+### Panel organizer
 
-## Sugerencia de estructura React + Vite
+1. `POST /api/v1/auth/register` o `POST /api/v1/auth/login`
+2. `POST /api/v1/tournaments`
+3. `POST /api/v1/tournaments/{tournamentId}/participants`
+4. `POST /api/v1/tournaments/{tournamentId}/rounds`
+5. `POST /api/v1/rounds/{roundId}/matches`
+6. `PATCH /api/v1/tournaments/{tournamentId}/publish`
+7. `PATCH /api/v1/tournaments/{tournamentId}/activate`
+8. `GET /api/v1/tournaments/{tournamentId}/access`
 
-```text
-src/
-  app/
-    router.tsx
-    providers.tsx
-  api/
-    http.ts
-    auth.ts
-    tournaments.ts
-    join.ts
-    votes.ts
-    websocket.ts
-  features/
-    organizer/
-      auth/
-      tournaments/
-      rounds/
-      matches/
-      participants/
-      access/
-    voter/
-      join/
-      lobby/
-      voting/
-      results/
-  components/
-  hooks/
-  lib/
-  types/
-```
+### Web votantes
 
-## Cliente HTTP recomendado
+1. `POST /api/v1/join/pin` o `POST /api/v1/join/qr/info`
+2. Segun `mode`, llamar `POST /api/v1/join/name`, `POST /api/v1/join/qr` o `POST /api/v1/join/auth`
+3. Guardar `sessionToken`
+4. `GET /api/v1/join/me` para restaurar sesion
+5. `POST /api/v1/matches/{matchId}/vote`
+6. `GET /api/v1/matches/{matchId}/my-vote`
 
-- `fetch` o `axios`
-- crear dos helpers:
+## Observaciones importantes
 
-1. `authorizedClient`
-   agrega `Authorization: Bearer <jwt>`
-
-2. `sessionClient`
-   agrega `X-Tournament-Session: <sessionToken>`
-
-## Estados que el frontend debe modelar
-
-### Tournament
-
-- `DRAFT`
-- `PUBLISHED`
-- `ACTIVE`
-- `PAUSED`
-- `CLOSED`
-- `FINISHED`
-- `CANCELLED`
-
-### Round
-
-- `PENDING`
-- `OPEN`
-- `CLOSED`
-- `PROCESSING`
-- `PUBLISHED`
-
-### Match
-
-- `PENDING`
-- `OPEN`
-- `CLOSED`
-- `RESOLVED`
-- `TIED`
-- `CANCELLED`
+- `GET /api/v1/tournaments/{tournamentId}/participants` no es publico en el estado actual; requiere JWT.
+- `GET /api/v1/tournaments/{tournamentId}/rounds` no es publico en el estado actual; requiere JWT.
+- `GET /api/v1/rounds/{roundId}/matches` no es publico en el estado actual; requiere JWT.
+- `GET /api/v1/tournaments/{tournamentId}/results` no es publico en el estado actual; requiere JWT.
+- el backend entrega `joinPin`, `qrToken` y `joinUrl` solo por el endpoint de acceso del torneo
+- el frontend debe renderizar la imagen QR a partir de `joinUrl`
+- `joinUrl` debe apuntar al frontend del votante, no al backend
 
 ## Swagger
 
-Para descubrir payloads reales:
+Para inspeccionar request/response en vivo:
 
 - `http://localhost:8080/swagger-ui.html`
 
-## Observaciones importantes para frontend
+## Licencia
 
-- el `joinPin` y `qrToken` no vienen en el detalle publico del torneo
-- solo el organizador obtiene esos datos desde `/tournaments/{id}/access`
-- el QR debe apuntar al frontend, no al backend, usando `joinUrl`
-- si el usuario entra por QR, el frontend debe parsear `qrToken` desde la URL y llamar `/api/v1/join/qr/info`
-
-## Recomendacion de implementacion por fases
-
-### Fase 1
-
-- login organizador
-- CRUD torneos
-- mostrar PIN + QR
-
-### Fase 2
-
-- entrada votante por PIN
-- modos `DISPLAY_NAME` y `ANONYMOUS`
-- lobby y lista de matches
-
-### Fase 3
-
-- voto por sesion
-- resultados y estado de voto
-- realtime con WebSocket
-
-### Fase 4
-
-- modo `EMAIL_PASSWORD`
-- reconexion de sesion
-- UX fina y manejo de errores
-
-## Estado actual del backend
-
-Implementado y probado:
-
-- auth JWT
-- torneos, rondas, matches, participantes
-- acceso por PIN/QR
-- sesion de torneo
-- voto por sesion
-- auditoria
-- WebSocket
-- Swagger
-
-Verificacion:
-
-```bash
-./gradlew test
-```
-
-Resultado esperado:
-
-```text
-BUILD SUCCESSFUL
-```
+Este proyecto se distribuye bajo la licencia MIT.
