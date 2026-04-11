@@ -5,9 +5,9 @@ spring:
   application:
     name: votaciones-api
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/votaciones}
-    username: ${DB_USERNAME:votaciones}
-    password: ${DB_PASSWORD:votaciones}
+    url: ${DB_URL:jdbc:postgresql://db.oukpvwelxqduiritkxpt.supabase.co:5432/postgres}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:}
   jpa:
     open-in-view: false
     hibernate:
